@@ -1,6 +1,6 @@
 from traits.api import (
     HasStrictTraits, Instance, DelegatesTo, on_trait_change, 
-    File, Button, Callable, List, Range
+    File, Callable, List, Range, Array, Bool, cached_property, Property
 )
 from traitsui.api import UItem, View, Item
 from enable.component_editor import ComponentEditor
@@ -47,20 +47,40 @@ class ImageAnalysis(HasStrictTraits):
 
     data = DelegatesTo('plot_data')
 
-    analyse = Button()
+    analysed_data = Property(
+        Array(dtype='uint8'), 
+        depends_on='original_data,analysis_function,input_argument'
+    )
+
+    original_data = Array(dtype='uint8')
+
+    view_analysis = Bool()
 
     analysis_function = Callable()
 
     input_argument = Range(1, 5)
 
-    @on_trait_change('analyse,input_argument')
-    def do_analysis(self):
-        if self.analysis_function is not None:
-            self.data = self.analysis_function(self.data, self.input_argument)
+    def _input_argument_changed(self):
+        if self.view_analysis:
+            self.data = self.analysed_data
+
+    def _view_analysis_changed(self):
+        if self.view_analysis:
+            self.data = self.analysed_data
+        elif len(self.original_data) > 0:
+            self.data = self.original_data
+            
+    @cached_property
+    def _get_analysed_data(self):     
+        if self.analysis_function is not None and len(self.original_data) > 0:
+            return self.analysis_function(self.original_data, self.input_argument)
+        return np.array()
 
     def _image_file_changed(self):
         if os.path.isfile(self.image_file):
-            self.data = load_image(self.image_file)
+            self.original_data = load_image(self.image_file)
+            if not self.view_analysis:
+                self.data = self.original_data
 
     def _plot_data_default(self):
         return ImageData(data=BLANK_IMG)
@@ -75,7 +95,7 @@ class ImageAnalysis(HasStrictTraits):
     def default_traits_view(self):
         return View(
             Item('image_file'),
-            UItem('analyse'),
+            Item('view_analysis'),
             Item('input_argument'),
             UItem('plot', editor=ComponentEditor()),
             resizable=True

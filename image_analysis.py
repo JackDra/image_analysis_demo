@@ -1,6 +1,6 @@
 from traits.api import (
     HasStrictTraits, Instance, DelegatesTo, on_trait_change, 
-    File, Button, Callable
+    File, Button, Callable, List, Range
 )
 from traitsui.api import UItem, View, Item
 from enable.component_editor import ComponentEditor
@@ -18,14 +18,18 @@ BLANK_IMG = np.zeros((1920, 1080, 3)).astype(np.uint8)
 def load_image(image_path):
     """ load an image from disk """
     pil_image = Image.open(image_path)
+    # just some corrections to get the orientation right
     return np.array(pil_image).swapaxes(0, 1)[::-1, :, :]
 
-def canny_analysis(input_image):
-    """ run canny edge detection on black and white version of image """
+def canny_analysis(input_image, sigma):
+    """ 
+        run canny edge detection on black and white version of image 
+        sigma is passed to the canny function, it does smoothing.
+    """
     # convert to black and white since canny only works on greyscale
     bw_image = np.dot(input_image, [0.2989, 0.5870, 0.1140]).astype(np.uint8)
     # run the edge detection
-    edge_image = feature.canny(bw_image)
+    edge_image = feature.canny(bw_image, sigma=sigma)
     # will return boolean array, need to convert True -> 252, False -> 0
     edge_image = edge_image.astype(np.uint8) * 252
     # chaco will only plot rgb images, so we duplicate the value for rgb    
@@ -47,9 +51,12 @@ class ImageAnalysis(HasStrictTraits):
 
     analysis_function = Callable()
 
-    def _analyse_changed(self):
+    input_argument = Range(1, 5)
+
+    @on_trait_change('analyse,input_argument')
+    def do_analysis(self):
         if self.analysis_function is not None:
-            self.data = self.analysis_function(self.data)
+            self.data = self.analysis_function(self.data, self.input_argument)
 
     def _image_file_changed(self):
         if os.path.isfile(self.image_file):
@@ -69,6 +76,7 @@ class ImageAnalysis(HasStrictTraits):
         return View(
             Item('image_file'),
             UItem('analyse'),
+            Item('input_argument'),
             UItem('plot', editor=ComponentEditor()),
             resizable=True
         )
